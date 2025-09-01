@@ -57,12 +57,8 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentSlide = 0;
     const totalSlides = slides.length;
 
-    console.log('Image slider setup - Slides found:', totalSlides);
-
     // Function to show slide
     function showSlide(index) {
-        console.log('Showing slide:', index);
-        
         // Remove active class from all slides and dots
         slides.forEach(slide => slide.classList.remove('active'));
         dots.forEach(dot => dot.classList.remove('active'));
@@ -92,7 +88,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (prevBtn) {
         prevBtn.addEventListener('click', function(e) {
             e.preventDefault();
-            console.log('Prev button clicked');
             prevSlide();
         });
     }
@@ -100,7 +95,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (nextBtn) {
         nextBtn.addEventListener('click', function(e) {
             e.preventDefault();
-            console.log('Next button clicked');
             nextSlide();
         });
     }
@@ -109,7 +103,6 @@ document.addEventListener('DOMContentLoaded', function() {
     dots.forEach((dot, index) => {
         dot.addEventListener('click', function(e) {
             e.preventDefault();
-            console.log('Dot clicked:', index);
             currentSlide = index;
             showSlide(currentSlide);
         });
@@ -117,12 +110,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Auto-slide every 4 seconds
     const autoSlideInterval = setInterval(nextSlide, 4000);
-    console.log('Auto-slide interval set to 4 seconds');
 
     // Initialize slider
     showSlide(0);
-    
-    console.log('Image slider setup complete');
 });
 
 // Smooth scrolling for navigation links
@@ -148,11 +138,19 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
+// EmailJS Configuration
+(function() {
+    emailjs.init(EMAILJS_CONFIG.PUBLIC_KEY);
+})();
+
 // Appointment Form Handling
 document.addEventListener('DOMContentLoaded', function() {
     const appointmentForm = document.getElementById('appointmentForm');
     const successModal = document.getElementById('successModal');
+    const errorModal = document.getElementById('errorModal');
+    const loadingModal = document.getElementById('loadingModal');
     const closeModalBtn = document.querySelector('.close');
+    const closeErrorModalBtn = document.querySelector('#errorModal .close');
 
     if (appointmentForm) {
         appointmentForm.addEventListener('submit', function(e) {
@@ -170,21 +168,126 @@ document.addEventListener('DOMContentLoaded', function() {
                 message: formData.get('message')
             };
             
-            // Show success modal
-            if (successModal) {
-                successModal.style.display = 'block';
+            // Show loading modal
+            if (loadingModal) {
+                loadingModal.style.display = 'block';
             }
             
-            // Reset form
-            this.reset();
-            
-            // Set minimum date for future appointments
-            const dateInput = document.getElementById('date');
-            if (dateInput) {
-                const today = new Date().toISOString().split('T')[0];
-                dateInput.setAttribute('min', today);
-            }
+            // Send appointment emails
+            sendAppointmentEmail(appointmentData);
         });
+    }
+
+    // Function to send appointment email
+    function sendAppointmentEmail(appointmentData) {
+        // EmailJS template parameters for auto-reply to customer
+        const templateParams = {
+            to_email: EMAILJS_CONFIG.RECIPIENT_EMAIL,
+            to: EMAILJS_CONFIG.RECIPIENT_EMAIL,
+            recipient: EMAILJS_CONFIG.RECIPIENT_EMAIL,
+            email: EMAILJS_CONFIG.RECIPIENT_EMAIL,
+            
+            // Customer information
+            from_name: appointmentData.name,
+            name: appointmentData.name,
+            from_email: appointmentData.email || 'No email provided',
+            email: appointmentData.email || 'No email provided',
+            from_phone: appointmentData.phone,
+            phone: appointmentData.phone,
+            
+            // Appointment details
+            service: appointmentData.service,
+            preferred_date: appointmentData.date,
+            date: appointmentData.date,
+            preferred_time: appointmentData.time,
+            time: appointmentData.time,
+            special_requests: appointmentData.message || 'No special requests',
+            message: appointmentData.message || 'No special requests',
+            
+            // Salon information
+            salon_name: 'Perfect Threading & Henna',
+            salon_address: '1132 Francis St, Longmont, CO',
+            salon_phone: '(303) 555-0123'
+        };
+
+        // Send auto-reply to customer (using existing template)
+        emailjs.send(EMAILJS_CONFIG.SERVICE_ID, EMAILJS_CONFIG.TEMPLATE_ID, templateParams)
+            .then(function(response) {
+                console.log('Auto-reply sent successfully!', response.status, response.text);
+                
+                // Now send appointment notification to salon owner
+                sendAppointmentNotification(appointmentData);
+            }, function(error) {
+                console.log('Auto-reply failed...', error);
+                handleAppointmentError(error);
+            });
+    }
+
+    // Function to send appointment notification to salon owner
+    function sendAppointmentNotification(appointmentData) {
+        // Template parameters for appointment notification to salon owner
+        const notificationParams = {
+            name: appointmentData.name,
+            email: appointmentData.email || 'No email provided',
+            phone: appointmentData.phone,
+            service: appointmentData.service,
+            date: appointmentData.date,
+            time: appointmentData.time,
+            message: appointmentData.message || 'No special requests'
+        };
+
+        emailjs.send(EMAILJS_CONFIG.SERVICE_ID, EMAILJS_CONFIG.APPOINTMENT_TEMPLATE_ID, notificationParams)
+            .then(function(response) {
+                console.log('Appointment notification sent successfully!', response.status, response.text);
+                completeAppointmentProcess();
+            }, function(error) {
+                console.log('Appointment notification failed...', error);
+                // Even if notification fails, still complete the process since auto-reply worked
+                completeAppointmentProcess();
+            });
+    }
+
+    // Function to complete the appointment process
+    function completeAppointmentProcess() {
+        // Hide loading modal
+        if (loadingModal) {
+            loadingModal.style.display = 'none';
+        }
+        
+        // Show success modal
+        if (successModal) {
+            successModal.style.display = 'block';
+        }
+        
+        // Reset form
+        appointmentForm.reset();
+        
+        // Set minimum date for future appointments
+        const dateInput = document.getElementById('date');
+        if (dateInput) {
+            const today = new Date().toISOString().split('T')[0];
+            dateInput.setAttribute('min', today);
+            
+            // Set default date to tomorrow
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            dateInput.value = tomorrow.toISOString().split('T')[0];
+        }
+    }
+
+    // Function to handle appointment errors
+    function handleAppointmentError(error) {
+        // Hide loading modal
+        if (loadingModal) {
+            loadingModal.style.display = 'none';
+        }
+        
+        // Show error modal
+        if (errorModal) {
+            document.getElementById('errorMessage').textContent = 
+                'There was an error sending your appointment request. Please try again or contact us directly.';
+            errorModal.style.display = 'block';
+        }
     }
 
     // Close modal functions
@@ -194,19 +297,45 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function closeErrorModal() {
+        if (errorModal) {
+            errorModal.style.display = 'none';
+        }
+    }
+
     if (closeModalBtn) {
         closeModalBtn.addEventListener('click', closeModal);
     }
 
-    // Close modal when clicking outside
+    if (closeErrorModalBtn) {
+        closeErrorModalBtn.addEventListener('click', closeErrorModal);
+    }
+
+    // Close modals when clicking outside
     window.addEventListener('click', function(e) {
         if (e.target === successModal) {
             closeModal();
         }
+        if (e.target === errorModal) {
+            closeErrorModal();
+        }
     });
 
-    // Make closeModal function global
+    // Make functions global
     window.closeModal = closeModal;
+    window.closeErrorModal = closeErrorModal;
+    
+    // Initialize date input with minimum date and default value
+    const dateInput = document.getElementById('date');
+    if (dateInput) {
+        const today = new Date().toISOString().split('T')[0];
+        dateInput.setAttribute('min', today);
+        
+        // Set default date to tomorrow
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        dateInput.value = tomorrow.toISOString().split('T')[0];
+    }
 });
 
 // Get Directions Function

@@ -325,6 +325,28 @@
         </div>
     </div>
 
+    <!-- Loading Modal -->
+    <div id="loadingModal" class="modal">
+        <div class="modal-content">
+            <div class="loading-spinner"></div>
+            <h2>Booking Your Appointment...</h2>
+            <p>Please wait while we process your request.</p>
+        </div>
+    </div>
+
+    <!-- Error Modal -->
+    <div id="errorModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Booking Error</h2>
+            <p id="errorMessage">There was an error booking your appointment. Please try again.</p>
+            <button class="modal-btn" onclick="closeErrorModal()">OK</button>
+        </div>
+    </div>
+
+    <!-- EmailJS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+    <script src="emailjs-config.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
