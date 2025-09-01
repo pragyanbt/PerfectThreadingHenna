@@ -143,6 +143,93 @@ document.addEventListener('DOMContentLoaded', function() {
     emailjs.init(EMAILJS_CONFIG.PUBLIC_KEY);
 })();
 
+// Availability Management System
+class AvailabilityManager {
+    constructor() {
+        this.bookedSlots = new Map(); // Store booked slots: date -> Set of times
+        this.availableTimes = [
+            '09:00', '10:00', '11:00', '12:00', '13:00', 
+            '14:00', '15:00', '16:00', '17:00', '18:00'
+        ];
+        this.loadBookedSlots();
+    }
+
+    // Load booked slots from localStorage (simulating a database)
+    loadBookedSlots() {
+        const saved = localStorage.getItem('bookedSlots');
+        if (saved) {
+            this.bookedSlots = new Map(JSON.parse(saved));
+        }
+    }
+
+    // Save booked slots to localStorage
+    saveBookedSlots() {
+        const data = Array.from(this.bookedSlots.entries());
+        localStorage.setItem('bookedSlots', JSON.stringify(data));
+    }
+
+    // Check if a time slot is available
+    isSlotAvailable(date, time) {
+        const bookedTimes = this.bookedSlots.get(date);
+        return !bookedTimes || !bookedTimes.has(time);
+    }
+
+    // Book a time slot
+    bookSlot(date, time) {
+        if (!this.bookedSlots.has(date)) {
+            this.bookedSlots.set(date, new Set());
+        }
+        this.bookedSlots.get(date).add(time);
+        this.saveBookedSlots();
+        this.updateTimeSelectOptions(date);
+    }
+
+    // Get available times for a specific date
+    getAvailableTimes(date) {
+        const bookedTimes = this.bookedSlots.get(date) || new Set();
+        return this.availableTimes.filter(time => !bookedTimes.has(time));
+    }
+
+    // Update the time select options in the appointment form
+    updateTimeSelectOptions(date) {
+        const timeSelect = document.getElementById('time');
+        if (!timeSelect) return;
+
+        // Clear existing options
+        timeSelect.innerHTML = '<option value="">Select time</option>';
+        
+        // Add available times
+        const availableTimes = this.getAvailableTimes(date);
+        availableTimes.forEach(time => {
+            const option = document.createElement('option');
+            option.value = time;
+            option.textContent = this.formatTimeDisplay(time);
+            timeSelect.appendChild(option);
+        });
+
+        // If no available times, show message
+        if (availableTimes.length === 0) {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'No available times for this date';
+            option.disabled = true;
+            timeSelect.appendChild(option);
+        }
+    }
+
+    // Format time for display (e.g., "09:00" -> "9:00 AM")
+    formatTimeDisplay(time) {
+        const [hours, minutes] = time.split(':');
+        const hour = parseInt(hours);
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+        return `${displayHour}:${minutes} ${ampm}`;
+    }
+}
+
+// Global availability manager instance
+const availabilityManager = new AvailabilityManager();
+
 // Appointment Form Handling
 document.addEventListener('DOMContentLoaded', function() {
     const appointmentForm = document.getElementById('appointmentForm');
@@ -259,11 +346,17 @@ document.addEventListener('DOMContentLoaded', function() {
             successModal.style.display = 'block';
         }
         
+        // Book the time slot
+        const dateInput = document.getElementById('date');
+        const timeInput = document.getElementById('time');
+        if (dateInput && timeInput && dateInput.value && timeInput.value) {
+            availabilityManager.bookSlot(dateInput.value, timeInput.value);
+        }
+        
         // Reset form
         appointmentForm.reset();
         
         // Set minimum date for future appointments
-        const dateInput = document.getElementById('date');
         if (dateInput) {
             const today = new Date().toISOString().split('T')[0];
             dateInput.setAttribute('min', today);
@@ -272,6 +365,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const tomorrow = new Date();
             tomorrow.setDate(tomorrow.getDate() + 1);
             dateInput.value = tomorrow.toISOString().split('T')[0];
+        }
+        
+        // Update time options for the new date
+        if (dateInput && dateInput.value) {
+            availabilityManager.updateTimeSelectOptions(dateInput.value);
         }
     }
 
@@ -335,8 +433,92 @@ document.addEventListener('DOMContentLoaded', function() {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         dateInput.value = tomorrow.toISOString().split('T')[0];
+        
+        // Update time options for the default date
+        availabilityManager.updateTimeSelectOptions(dateInput.value);
+        
+        // Add event listener for date changes
+        dateInput.addEventListener('change', function() {
+            availabilityManager.updateTimeSelectOptions(this.value);
+            updateAvailableTimesDisplay(this.value);
+        });
+    }
+    
+    // Initialize availability check date input
+    const checkDateInput = document.getElementById('checkDate');
+    if (checkDateInput) {
+        const today = new Date().toISOString().split('T')[0];
+        checkDateInput.setAttribute('min', today);
+        checkDateInput.value = today;
+    }
+    
+    // Initialize the available times display
+    if (dateInput && dateInput.value) {
+        updateAvailableTimesDisplay(dateInput.value);
     }
 });
+
+// Function to update the available times display
+function updateAvailableTimesDisplay(selectedDate) {
+    const availableTimesDisplay = document.getElementById('availableTimesDisplay');
+    if (!availableTimesDisplay || !selectedDate) return;
+    
+    const availableTimes = availabilityManager.getAvailableTimes(selectedDate);
+    const bookedTimes = availabilityManager.bookedSlots.get(selectedDate) || new Set();
+    
+    let displayHTML = '';
+    
+    if (availableTimes.length === 0) {
+        displayHTML = `
+            <div class="no-availability">
+                <p>❌ All time slots for ${new Date(selectedDate).toLocaleDateString()} are booked</p>
+                <p>Please select a different date</p>
+            </div>
+        `;
+    } else {
+        displayHTML = `
+            <div class="time-info">
+                <strong>Available Times for ${new Date(selectedDate).toLocaleDateString()}</strong>
+                <br><small>${availableTimes.length} slots available</small>
+            </div>
+            <div class="available-times-grid">
+                ${availableTimes.map(time => `
+                    <div class="time-slot" onclick="selectTimeSlot('${time}')">
+                        ${availabilityManager.formatTimeDisplay(time)}
+                    </div>
+                `).join('')}
+            </div>
+            ${bookedTimes.size > 0 ? `
+                <div style="margin-top: 1rem;">
+                    <small style="color: #666;">Booked times:</small>
+                    <div class="available-times-grid">
+                        ${Array.from(bookedTimes).map(time => `
+                            <div class="time-slot booked">
+                                ${availabilityManager.formatTimeDisplay(time)}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+        `;
+    }
+    
+    availableTimesDisplay.innerHTML = displayHTML;
+}
+
+// Function to select a time slot from the display
+function selectTimeSlot(time) {
+    const timeSelect = document.getElementById('time');
+    if (timeSelect) {
+        timeSelect.value = time;
+        timeSelect.style.borderColor = '#4caf50';
+        
+        // Add a visual confirmation
+        setTimeout(() => {
+            timeSelect.style.borderColor = '#e0e0e0';
+        }, 2000);
+    }
+}
 
 // Get Directions Function
 function openDirections() {
